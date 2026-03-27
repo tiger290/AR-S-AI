@@ -383,8 +383,8 @@ class ArisGUI:
         )
 
 
-def _gui_thread_func():
-    """GUI thread fonksiyonu — ayrı thread'de çalışır."""
+def start_gui():
+    """GUI'yi ana thread'de başlat (macOS tkinter zorunluluğu)."""
     global _gui_root
     try:
         root = tk.Tk()
@@ -393,12 +393,6 @@ def _gui_thread_func():
         root.mainloop()
     except Exception as e:
         print(f"[GUI] GUI başlatılamadı: {e}")
-
-
-def start_gui():
-    """GUI'yi ayrı bir daemon thread'de başlat."""
-    t = threading.Thread(target=_gui_thread_func, daemon=True)
-    t.start()
 
 
 def set_gui_state(state: str):
@@ -749,14 +743,8 @@ def wait_for_wake_word():
 # --- BÖLÜM 9: ANA DÖNGÜ (MAIN) ---
 # ============================================================
 
-if __name__ == "__main__":
-    print("=" * 50)
-    print("  ARİS başlatılıyor... 🤖")
-    print("=" * 50)
-
-    # GUI'yi başlat (ayrı thread)
-    start_gui()
-
+def aris_loop():
+    """Ana döngü — wake word, STT, AI, TTS. Ayrı thread'de çalışır. Bloke edici, normal şartlarda dönmez."""
     # Başlangıç mesajı
     show_face_happy()
     set_gui_state("happy")
@@ -840,3 +828,17 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"[HATA] Beklenmedik bir hata oluştu: {e}")
             time.sleep(2)
+
+
+if __name__ == "__main__":
+    print("=" * 50)
+    print("  ARİS başlatılıyor... 🤖")
+    print("=" * 50)
+
+    # Ana döngüyü ayrı thread'de başlat
+    loop_thread = threading.Thread(target=aris_loop, daemon=True)
+    loop_thread.start()
+
+    # GUI'yi ana thread'de başlat (macOS tkinter zorunluluğu — bloke edici çağrı)
+    start_gui()
+    print("[ARİS] GUI kapandı, çıkılıyor.")
