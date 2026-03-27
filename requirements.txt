@@ -1,0 +1,23 @@
+# Aris — Raspberry Pi Sesli Yapay Zeka Asistanı
+# Bağımlılıklar
+
+# Wake word tespiti ("Hey Aris")
+pvporcupine
+
+# Ses kaydı
+pyaudio
+
+# Konuşmadan metne (STT) — OpenAI Whisper API
+openai
+
+# Metinden konuşmaya (TTS)
+pyttsx3
+
+# OLED ekran sürücüsü (SSD1306)
+luma.oled
+
+# Görüntü işleme (OLED yüz ifadeleri için)
+Pillow
+
+# Ses çalma
+pygame
