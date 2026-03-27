@@ -20,3 +20,9 @@ Pillow
 
 # Ses çalma
 pygame
+
+# Spotify entegrasyonu
+spotipy
+
+# HTTP istekleri (hava durumu API)
+requests
