@@ -160,9 +160,9 @@ _gui_root = None
 
 _EYE_BASE_LEFT = (160, 160)
 _EYE_BASE_RIGHT = (320, 160)
-_EYE_W = 60
-_EYE_H = 50
-_PUPIL_R = 14
+_EYE_W = 70
+_EYE_H = 60
+_PUPIL_R = 12
 
 
 class ArisGUI:
@@ -180,7 +180,7 @@ class ArisGUI:
         )
         self.label_title.pack(pady=(20, 0))
 
-        self.canvas = tk.Canvas(root, width=480, height=260, bg="black", highlightthickness=0)
+        self.canvas = tk.Canvas(root, width=480, height=280, bg="black", highlightthickness=0)
         self.canvas.pack(pady=10)
 
         self.label_status = tk.Label(
@@ -301,18 +301,31 @@ class ArisGUI:
             self._draw_eye(lx, ly, ew, eh, pupil_dy=0)
             self._draw_eye(rx, ry, ew, eh, pupil_dy=0)
 
+    def _draw_rounded_rect_filled(self, x1, y1, x2, y2, radius=18, color="white"):
+        """Dolu yuvarlak köşeli dikdörtgen çizer."""
+        r = radius
+        self.canvas.create_rectangle(x1 + r, y1, x2 - r, y2, fill=color, outline="")
+        self.canvas.create_rectangle(x1, y1 + r, x2, y2 - r, fill=color, outline="")
+        self.canvas.create_arc(x1, y1, x1 + 2*r, y1 + 2*r, start=90, extent=90, fill=color, outline="", style=tk.PIESLICE)
+        self.canvas.create_arc(x2 - 2*r, y1, x2, y1 + 2*r, start=0, extent=90, fill=color, outline="", style=tk.PIESLICE)
+        self.canvas.create_arc(x1, y2 - 2*r, x1 + 2*r, y2, start=180, extent=90, fill=color, outline="", style=tk.PIESLICE)
+        self.canvas.create_arc(x2 - 2*r, y2 - 2*r, x2, y2, start=270, extent=90, fill=color, outline="", style=tk.PIESLICE)
+
     def _draw_eye(self, cx, cy, ew, eh, pupil_dy=0):
-        self.canvas.create_oval(cx - ew, cy - eh, cx + ew, cy + eh, outline="white", width=3)
+        """Yuvarlak köşeli kare göz çiz."""
+        x1, y1, x2, y2 = cx - ew, cy - eh, cx + ew, cy + eh
+        self._draw_rounded_rect_filled(x1, y1, x2, y2, radius=18, color="white")
         py = cy + pupil_dy
-        self.canvas.create_oval(cx - _PUPIL_R, py - _PUPIL_R, cx + _PUPIL_R, py + _PUPIL_R, fill="white", outline="")
+        pr = _PUPIL_R
+        self.canvas.create_oval(cx - pr, py - pr, cx + pr, py + pr, fill="black", outline="")
 
     def _draw_eye_closed(self, cx, cy, ew):
-        self.canvas.create_line(cx - ew, cy, cx + ew, cy, fill="white", width=4)
+        self._draw_rounded_rect_filled(cx - ew, cy - 6, cx + ew, cy + 6, radius=6, color="white")
 
     def _draw_eye_happy(self, cx, cy, ew):
         self.canvas.create_arc(
             cx - ew, cy - _EYE_H // 2, cx + ew, cy + _EYE_H // 2,
-            start=0, extent=180, style=tk.ARC, outline="white", width=4
+            start=0, extent=180, fill="white", outline="", style=tk.CHORD
         )
 
 
