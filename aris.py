@@ -11,6 +11,7 @@ import threading
 import tkinter as tk
 import pyaudio
 import pygame
+import anthropic
 import openai
 import pvporcupine
 import requests
@@ -40,6 +41,9 @@ DEFAULT_CITY = "Istanbul"
 
 openai.api_key = OPENAI_API_KEY
 _openai_client = openai.OpenAI()
+
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "senin-anthropic-keyin")
+_anthropic_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
 try:
     pygame.mixer.init()
@@ -542,20 +546,18 @@ def get_response(user_text):
     if len(conversation_history) > MAX_HISTORY:
         conversation_history = conversation_history[-MAX_HISTORY:]
 
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}] + conversation_history
-
     try:
-        response = openai.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=messages,
+        response = _anthropic_client.messages.create(
+            model="claude-opus-4-5",
             max_tokens=250,
-            temperature=1.0,
+            system=SYSTEM_PROMPT,
+            messages=conversation_history,
         )
-        reply = response.choices[0].message.content.strip()
+        reply = response.content[0].text.strip()
         conversation_history.append({"role": "assistant", "content": reply})
         return reply
     except Exception as e:
-        print(f"[BRAIN] OpenAI API hatası: {e}")
+        print(f"[BRAIN] Anthropic API hatası: {e}")
         return None
 
 
