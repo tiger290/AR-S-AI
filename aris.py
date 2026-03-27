@@ -1,10 +1,11 @@
+import io
 import os
 import time
 import wave
 import tempfile
 import struct
 import pyaudio
-import pyttsx3
+import pygame
 import openai
 import pvporcupine
 from PIL import Image, ImageDraw
@@ -21,13 +22,21 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "senin-api-keyin")
 PORCUPINE_ACCESS_KEY = os.getenv("PORCUPINE_ACCESS_KEY", "senin-porcupine-keyin")
 WAKE_WORD_KEYWORD_PATH = "hey-aris.ppn"  # Porcupine keyword dosyası
 MIC_DEVICE_INDEX = 0
-TTS_VOICE = "tr"       # Türkçe ses
 OLED_WIDTH = 128
 OLED_HEIGHT = 64
 RECORD_DURATION = 5    # Saniye cinsinden kayıt süresi
 MAX_HISTORY = 10       # Konuşma geçmişinde tutulacak maksimum mesaj sayısı
 
 openai.api_key = OPENAI_API_KEY
+
+# OpenAI istemcisi (TTS ve diğer API çağrıları için)
+_openai_client = openai.OpenAI()
+
+# pygame ses mikseri başlat
+try:
+    pygame.mixer.init()
+except Exception as e:
+    print(f"[TTS] pygame.mixer başlatılamadı: {e}")
 
 # ============================================================
 # --- BÖLÜM 2: KİŞİLİK (PERSONALITY) ---
@@ -263,44 +272,27 @@ def get_response(user_text):
 # --- BÖLÜM 6: METİNDEN KONUŞMAYA (TTS) ---
 # ============================================================
 
-# pyttsx3 motorunu başlat
-_tts_engine = None
-try:
-    _tts_engine = pyttsx3.init()
-    # Türkçe ses motoru için hız ve ses ayarı
-    _tts_engine.setProperty("rate", 165)
-    _tts_engine.setProperty("volume", 1.0)
-    # Türkçe ses varsa ayarla (dil kodu veya isimde "turkish" geçiyorsa)
-    voices = _tts_engine.getProperty("voices")
-    for voice in voices:
-        voice_id_lower = voice.id.lower()
-        voice_name_lower = voice.name.lower()
-        if (
-            f"_{TTS_VOICE}_" in voice_id_lower
-            or voice_id_lower.endswith(f"_{TTS_VOICE}")
-            or "turkish" in voice_name_lower
-        ):
-            _tts_engine.setProperty("voice", voice.id)
-            break
-except Exception as e:
-    print(f"[TTS] pyttsx3 başlatılamadı: {e}")
-
-
 def speak(text):
     """
-    Verilen metni pyttsx3 ile seslendirir.
-    Motor başlatılamadıysa sadece ekrana yazar.
+    Verilen metni OpenAI TTS API (tts-1-hd, onyx) ile seslendirir.
+    Jarvis tarzı derin erkek sesi kullanır.
     """
     if not text:
         return
     print(f"[ARİS] {text}")
-    if _tts_engine is None:
-        return
     try:
-        _tts_engine.say(text)
-        _tts_engine.runAndWait()
+        response = _openai_client.audio.speech.create(
+            model="tts-1-hd",
+            voice="onyx",
+            input=text,
+        )
+        audio_data = io.BytesIO(response.content)
+        pygame.mixer.music.load(audio_data)
+        pygame.mixer.music.play()
+        while pygame.mixer.music.get_busy():
+            time.sleep(0.1)
     except Exception as e:
-        print(f"[TTS] Seslendirilirken hata: {e}")
+        print(f"[TTS] OpenAI TTS hatası: {e}")
 
 
 # ============================================================

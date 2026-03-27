@@ -10,8 +10,7 @@ pyaudio
 # Konuşmadan metne (STT) — OpenAI Whisper API
 openai
 
-# Metinden konuşmaya (TTS)
-pyttsx3
+# Metinden konuşmaya (TTS) — OpenAI TTS API
 
 # OLED ekran sürücüsü (SSD1306)
 luma.oled
