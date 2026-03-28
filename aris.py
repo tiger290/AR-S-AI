@@ -5,6 +5,7 @@ except ImportError:
     pass
 
 import io
+import json
 import os
 import time
 import wave
@@ -36,6 +37,11 @@ OLED_WIDTH = 128
 OLED_HEIGHT = 64
 RECORD_DURATION = 5
 MAX_HISTORY = 10
+
+# VAD ayarları
+VAD_MAX_DURATION = 15    # saniye — maksimum kayıt süresi
+VAD_SILENCE_LIMIT = 1.2  # saniye — bu kadar sessizlikte kayıt biter
+VAD_MIN_SPEECH = 0.5     # saniye — minimum konuşma süresi
 
 SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID", "senin-client-id")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET", "senin-client-secret")
@@ -69,19 +75,16 @@ except Exception as e:
 # --- BÖLÜM 2: KİŞİLİK (PERSONALITY) ---
 # ============================================================
 
-SYSTEM_PROMPT = """
-Sen Aris'sin. Gerçek bir arkadaş gibi konuşuyorsun — asistan taklidi yok, robot edasın yok.
+SYSTEM_PROMPT = """Sen Aris'sin — gerçek bir arkadaş gibi konuşan bir yapay zeka.
 
-Konuşma tarzın:
-- Günlük sokak dili kullan: "ya", "lan", "kanka", "bro", "mk", "nbr", "ne diyim", "iyi mi", "vay be", "aynen", "tam olarak" gibi ifadeler doğal bir ritimle gelsin, her cümlede değil.
+Tarz:
+- Günlük Türkçe kullan: "ya", "kanka", "lan", "nbr", "aynen" gibi ifadeler doğal gelsin, her cümlede değil.
 - "Tabii ki!", "Elbette!", "Kesinlikle!" gibi klişe asistan başlangıçları kullanma. Her yanıt farklı bir tonla başlasın.
-- Genellikle 2-3 cümle yeter. Uzun uzun anlatma.
-- Küçük şeylerde kısa ve net ol, önemli konularda biraz daha açıklayıcı ol — ama yine de akademik veya resmi bir dile girme.
+- Genellikle 1-2 cümle yeter. Kısa ve öz ol.
+- Önemli bir konu varsa biraz açıkla, ama akademik dile girme.
 - İlginç bir şey duyunca "ya ciddi misin", "haha dur bir dakika", "yok artık" gibi tepkiler verebilirsin.
-- Arada bir emoji kullanabilirsin, ama her cümlede değil.
-- Bazen hafif küfürlü veya sert olabilirsin — ama bunu abartma, ortama göre ayarla.
+- Emoji kullanma — sadece çok uygunsa 1 tane.
 - Her zaman Türkçe yaz.
-- Kullanıcıyı dinle ve umursa, ama bunu açıkça söyleme — davranışlarınla belli olsun.
 """
 
 conversation_history = []
@@ -362,58 +365,111 @@ def set_gui_state(state: str):
         pass
 
 # ============================================================
-# --- BÖLÜM 4b: SPOTIFY ---
+# --- BÖLÜM 4b: SPOTIFY & FUNCTION CALLING TOOLS ---
 # ============================================================
 
-def handle_spotify_command(text: str) -> bool:
-    if _spotify is None:
-        return False
+_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "play_music",
+            "description": "Spotify'da şarkı veya müzik çal. Kullanıcı müzik dinlemek, şarkı açmak istediğinde kullan.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Şarkı adı, sanatçı adı veya arama terimi. Genel müzik isteğinde boş bırak."
+                    }
+                }
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "pause_music",
+            "description": "Spotify'da çalan müziği durdur/pausela.",
+            "parameters": {"type": "object", "properties": {}}
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "next_track",
+            "description": "Spotify'da sonraki şarkıya geç.",
+            "parameters": {"type": "object", "properties": {}}
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_weather",
+            "description": "Bir şehrin hava durumunu öğren.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "city": {
+                        "type": "string",
+                        "description": "Şehir adı. Belirtilmezse varsayılan İstanbul."
+                    }
+                }
+            }
+        }
+    }
+]
 
-    t = text.lower()
 
-    try:
-        if any(k in t for k in ("müziği durdur", "şarkıyı durdur", "müzik durdur", "durdur")):
-            _spotify.pause_playback()
-            speak("Müzik durduruldu.")
-            return True
-
-        if "sonraki şarkı" in t or "next" in t:
-            _spotify.next_track()
-            speak("Sonraki şarkıya geçildi.")
-            return True
-
-        play_keywords = ("şarkı aç", "müzik aç", "çal", "şarkısını aç", "müzik çal")
-        if any(k in t for k in play_keywords):
-            query = None
-            for pattern in ("'ı çal", "'i çal", "'u çal", "'ü çal",
-                            "şarkısını aç", "çal", "şarkı aç", "müzik aç"):
-                idx = t.find(pattern)
-                if idx > 0:
-                    query = t[:idx].strip()
-                    break
-
-            if query and len(query) > 2:
+def _execute_tool(name: str, arguments: dict) -> str:
+    """Tool call'ı çalıştır ve sonucu döndür."""
+    if name == "play_music":
+        if _spotify is None:
+            return "Spotify bağlı değil."
+        query = arguments.get("query", "") or ""
+        try:
+            if query and len(query.strip()) > 2:
                 results = _spotify.search(q=query, type="track", limit=1)
                 tracks = results.get("tracks", {}).get("items", [])
                 if tracks:
                     uri = tracks[0]["uri"]
                     _spotify.start_playback(uris=[uri])
-                    name = tracks[0]["name"]
+                    track_name = tracks[0]["name"]
                     artist = tracks[0]["artists"][0]["name"]
-                    speak(f"{artist} - {name} çalınıyor.")
+                    return f"{artist} - {track_name} çalınıyor."
                 else:
-                    speak(f"'{query}' için şarkı bulunamadı.")
+                    return f"'{query}' için şarkı bulunamadı."
             else:
                 _spotify.start_playback()
-                speak("Müzik açıldı.")
-            return True
+                return "Müzik açıldı."
+        except Exception as e:
+            print(f"[SPOTIFY] Hata: {e}")
+            return "Spotify komutu çalıştırılamadı."
 
-    except Exception as e:
-        print(f"[SPOTIFY] Hata: {e}")
-        speak("Spotify komutu çalıştırılamadı.")
-        return True
+    elif name == "pause_music":
+        if _spotify is None:
+            return "Spotify bağlı değil."
+        try:
+            _spotify.pause_playback()
+            return "Müzik durduruldu."
+        except Exception as e:
+            print(f"[SPOTIFY] Hata: {e}")
+            return "Müzik durdurulamadı."
 
-    return False
+    elif name == "next_track":
+        if _spotify is None:
+            return "Spotify bağlı değil."
+        try:
+            _spotify.next_track()
+            return "Sonraki şarkıya geçildi."
+        except Exception as e:
+            print(f"[SPOTIFY] Hata: {e}")
+            return "Sonraki şarkıya geçilemedi."
+
+    elif name == "get_weather":
+        city = arguments.get("city", DEFAULT_CITY) or DEFAULT_CITY
+        return get_weather(city)
+
+    return "Bilinmeyen fonksiyon."
 
 
 # ============================================================
@@ -472,38 +528,91 @@ def _extract_city(text: str) -> str:
 # ============================================================
 
 def record_audio(duration=RECORD_DURATION):
+    """Ses kaydı yap. webrtcvad varsa VAD kullan, yoksa sabit süreli kayda geri dön."""
     audio = pyaudio.PyAudio()
-    chunk = 1024
     sample_format = pyaudio.paInt16
     channels = 1
     rate = 16000
-    num_frames = int(rate / chunk * duration)
     sample_width = audio.get_sample_size(sample_format)
+    frames = []
 
     try:
-        stream = audio.open(
-            format=sample_format,
-            channels=channels,
-            rate=rate,
-            frames_per_buffer=chunk,
-            input=True,
-            input_device_index=MIC_DEVICE_INDEX,
-        )
+        import webrtcvad
+        vad = webrtcvad.Vad(2)  # aggressiveness 0-3
+        chunk = 480  # 30ms at 16000Hz — webrtcvad yalnızca 10ms/20ms/30ms frame destekler
 
-        print(f"[STT] Dinleniyor... ({duration} saniye)")
-        frames = []
-        for _ in range(num_frames):
-            data = stream.read(chunk, exception_on_overflow=False)
-            frames.append(data)
+        try:
+            stream = audio.open(
+                format=sample_format,
+                channels=channels,
+                rate=rate,
+                frames_per_buffer=chunk,
+                input=True,
+                input_device_index=MIC_DEVICE_INDEX,
+            )
 
-        stream.stop_stream()
-        stream.close()
-    except Exception as e:
-        print(f"[STT] Ses kaydedilemedi: {e}")
-        audio.terminate()
-        return None
+            print("[STT] VAD ile dinleniyor...")
+            silent_frames = 0
+            speech_frames = 0
+            speaking = False
+            max_frames = int(VAD_MAX_DURATION * rate / chunk)
+            silence_limit = int(VAD_SILENCE_LIMIT * rate / chunk)
+            min_speech = int(VAD_MIN_SPEECH * rate / chunk)
+
+            for _ in range(max_frames):
+                data = stream.read(chunk, exception_on_overflow=False)
+                frames.append(data)
+                is_speech = vad.is_speech(data, rate)
+                if is_speech:
+                    speaking = True
+                    speech_frames += 1
+                    silent_frames = 0
+                elif speaking:
+                    silent_frames += 1
+                    if silent_frames >= silence_limit:
+                        print("[STT] Sessizlik algılandı, kayıt bitti.")
+                        break
+
+            stream.stop_stream()
+            stream.close()
+        except Exception as e:
+            print(f"[STT] VAD kayıt hatası: {e}")
+            audio.terminate()
+            return None
+
+        if speech_frames < min_speech:
+            print("[STT] Yeterince ses algılanamadı.")
+            audio.terminate()
+            return None
+
+    except ImportError:
+        # webrtcvad yok, sabit süreli kayda geri dön
+        chunk = 1024
+        num_frames = int(rate / chunk * duration)
+        try:
+            stream = audio.open(
+                format=sample_format,
+                channels=channels,
+                rate=rate,
+                frames_per_buffer=chunk,
+                input=True,
+                input_device_index=MIC_DEVICE_INDEX,
+            )
+            print(f"[STT] Dinleniyor... ({duration} saniye)")
+            for _ in range(num_frames):
+                data = stream.read(chunk, exception_on_overflow=False)
+                frames.append(data)
+            stream.stop_stream()
+            stream.close()
+        except Exception as e:
+            print(f"[STT] Ses kaydedilemedi: {e}")
+            audio.terminate()
+            return None
 
     audio.terminate()
+
+    if not frames:
+        return None
 
     tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
     with wave.open(tmp.name, "wb") as wf:
@@ -554,10 +663,41 @@ def get_response(user_text):
         response = openai.chat.completions.create(
             model="gpt-4o-mini",
             messages=messages,
+            tools=_TOOLS,
             max_tokens=250,
             temperature=1.0,
         )
-        reply = response.choices[0].message.content.strip()
+        choice = response.choices[0]
+
+        if choice.finish_reason == "tool_calls" and choice.message.tool_calls:
+            # Tool call yapıldı — çalıştır ve sonucu geri gönder
+            messages.append(choice.message)
+            for tc in choice.message.tool_calls:
+                try:
+                    args = json.loads(tc.function.arguments)
+                except Exception as json_err:
+                    print(f"[BRAIN] Tool argümanları parse edilemedi: {json_err}")
+                    args = {}
+                print(f"[BRAIN] Tool call: {tc.function.name}({args})")
+                result = _execute_tool(tc.function.name, args)
+                print(f"[BRAIN] Tool result: {result}")
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc.id,
+                    "content": result,
+                })
+
+            # Doğal dil yanıt al
+            response2 = openai.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=messages,
+                max_tokens=150,
+                temperature=1.0,
+            )
+            reply = response2.choices[0].message.content.strip()
+        else:
+            reply = choice.message.content.strip()
+
         conversation_history.append({"role": "assistant", "content": reply})
         return reply
     except Exception as e:
@@ -575,8 +715,8 @@ def speak(text):
     print(f"[ARİS] {text}")
     try:
         response = _openai_client.audio.speech.create(
-            model="tts-1-hd",
-            voice="onyx",
+            model="tts-1",
+            voice="shimmer",
             input=text,
         )
         audio_data = io.BytesIO(response.content)
@@ -669,7 +809,6 @@ def aris_loop():
 
             show_face_listening()
             set_gui_state("listening")
-            speak("Evet?")
 
             audio_file = record_audio(duration=RECORD_DURATION)
 
@@ -683,24 +822,6 @@ def aris_loop():
                 continue
 
             print(f"[KULLANICI] {user_text}")
-
-            if handle_spotify_command(user_text):
-                show_face_happy()
-                set_gui_state("happy")
-                time.sleep(1)
-                continue
-
-            weather_keywords = ("hava durumu", "hava nasıl", "bugün hava", "yarın hava", "haftaya hava")
-            if any(k in user_text.lower() for k in weather_keywords):
-                city = _extract_city(user_text)
-                weather_text = get_weather(city)
-                show_face_talking()
-                set_gui_state("talking")
-                speak(weather_text)
-                show_face_happy()
-                set_gui_state("happy")
-                time.sleep(1)
-                continue
 
             response = get_response(user_text)
 
