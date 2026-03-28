@@ -1,141 +1,136 @@
-# 🤖 ARİS — Raspberry Pi Sesli Yapay Zeka Asistanı
+# 🤖 ARİS — Sesli AI Asistan
 
-> *"Ne istiyorsun lan?"* — Aris, her sabah
-
----
-
-## Nedir Bu?
-
-Aris, Raspberry Pi üzerinde çalışan, "Hey Aris" dediğinde uyanan, seninle konuşan, zaman zaman ağzı bozuk ama her zaman sevimli bir yapay zeka asistanıdır. Siri'yi, Alexa'yı unut. Aris senin kendi ruhuna göre şekillenmiş, samimi, espri anlayan bir dosttur. API key'in varsa hayata geçiyor, yoksa seni hayal kırıklığına uğratıyor — tıpkı gerçek bir arkadaş gibi.
+Aris, Türkçe konuşan, "Hey Aris" dediğinde uyanan, seninle samimi arkadaş gibi konuşan kişisel bir yapay zeka asistanıdır. Raspberry Pi veya herhangi bir bilgisayarda çalışır.
 
 ---
 
-## Aris'in Kişiliği Hakkında
+## ✨ Özellikler
 
-Aris klasik asistan değil. "Bugün hava nasıl?" sorusuna "Hava güneşli ve 22 derece. Size başka nasıl yardımcı olabilirim?" diye cevap vermez. Aris'ten "Lan dışarı çık biraz, evde çürüyorsun" gibi bir cevap alabilirsin. Bazen argo kullanır, bazen hafifçe küfür eder, ama seni gerçekten önemseyen bir dost gibi davranır. Klasik asistanlara kızdıysan, Aris tam sana göre.
-
----
-
-## 🔧 Donanım Listesi
-
-| Bileşen | Model/Öneri | Not |
-|---|---|---|
-| **Ana Kart** | Raspberry Pi 4 (4GB RAM) | Pi 5 de olur, daha hızlı |
-| **OLED Ekran** | SSD1306 128x64 (I2C) | Pixel art yüzler için |
-| **Mikrofon** | ReSpeaker 2-Mics HAT | Hem mikrofon hem hoparlör çıkışı |
-| **Hoparlör** | 3W mini + PAM8403 amp | Aris'in sesini duyurmak için |
-| **SD Kart** | 32GB Class 10 | OS + yazılım için |
-
-> 💡 ReSpeaker HAT alırsan hem mikrofon hem hoparlör sorununu tek kartla çözersin. Tavsiye edilir.
+- 🖥️ **Tkinter GUI** — Animasyonlu göz ifadeleri, blink, bakış hareketi
+- 📺 **OLED Yüz** — SSD1306 128x64 ekranda canlı yüz ifadeleri (idle, listening, thinking, talking, happy)
+- 🎵 **Spotify Entegrasyonu** — Şarkı aç/durdur/sonraki, sanatçı ve şarkı araması
+- 🌤️ **Hava Durumu** — OpenWeatherMap ile gerçek zamanlı hava durumu bilgisi
+- 🎙️ **STT (Konuşmadan Metne)** — OpenAI Whisper API ile yüksek doğruluklu ses tanıma
+- 🔊 **TTS (Metinden Konuşmaya)** — OpenAI TTS (`tts-1-hd`, `onyx` sesi) ile doğal konuşma
+- 💬 **AI Sohbet** — GPT-4o-mini ile 10 mesajlık konuşma geçmişi, Türkçe kişilik
+- 🔔 **Wake Word** — Porcupine ile "Hey Aris" uyandırma kelimesi
+- 🔁 **Thread-safe Döngü** — GUI ana thread'de, aris döngüsü ayrı thread'de
 
 ---
 
-## 📦 Yazılım Gereksinimleri
+## 🛠️ Gereksinimler
 
-```
-pvporcupine       # "Hey Aris" wake word dinleme
-openai-whisper    # Konuşmayı metne çevirme (Whisper API)
-openai            # ChatGPT ile beyin
-pyttsx3           # Metni sese çevirme (TTS)
-luma.oled         # SSD1306 OLED ekran sürücüsü
-pygame            # Ses çalma
-pillow            # OLED için görüntü işleme
-pyaudio           # Mikrofon ses kaydı
-```
+- **Python 3.10+**
+- **Mikrofon** (USB veya 3.5mm)
+- **Hoparlör** (3.5mm veya USB)
+- **Opsiyonel:** SSD1306 128x64 OLED ekran (I2C bağlantılı)
+- **Opsiyonel:** Raspberry Pi 4/5 (masaüstü/laptop da çalışır)
 
 ---
 
 ## 🚀 Kurulum
 
-### 1. Bağımlılıkları Yükle
+### 1. Sanal Ortam Oluştur
+
+```bash
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+```
+
+### 2. Bağımlılıkları Kur
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. API Keylerini Ayarla
+### 3. `.env` Dosyası Oluştur
+
+`.env.example` dosyasını kopyalayarak kendi `.env` dosyasını oluştur:
 
 ```bash
-export OPENAI_API_KEY="sk-..."
-export PORCUPINE_ACCESS_KEY="..."
+cp .env.example .env
 ```
 
-Ya da `aris.py` içindeki CONFIG bölümünde doğrudan değişkenlere yazabilirsin (test için).
+Sonra `.env` dosyasını düzenleyip gerçek API key'lerini yaz:
 
-### 3. Porcupine Keyword Dosyası
+```
+OPENAI_API_KEY=sk-...
+PORCUPINE_ACCESS_KEY=...
+SPOTIFY_CLIENT_ID=...
+SPOTIFY_CLIENT_SECRET=...
+OPENWEATHER_API_KEY=...
+```
+
+> ⚠️ `.env` dosyası `.gitignore` tarafından engellenir, asla GitHub'a push'lanmaz. Sadece `.env.example` repoda bulunur.
+
+### 4. Porcupine Wake Word Dosyasını Ekle
 
 [Picovoice Console](https://console.picovoice.ai/) adresinden ücretsiz hesap aç, "Hey Aris" için custom keyword oluştur ve `hey-aris.ppn` dosyasını proje dizinine koy.
 
-### 4. Çalıştır
+### 5. Çalıştır
 
 ```bash
 python aris.py
 ```
 
-Aris uyanana kadar bekle. "Hey Aris" de. Sonra ne olacağını sen de biliyorsun.
+---
+
+## 🔑 API Key'leri Nasıl Alınır?
+
+| Servis | Nereden Alınır | Ücret |
+|---|---|---|
+| **OpenAI** (Whisper + GPT + TTS) | [platform.openai.com](https://platform.openai.com/api-keys) | Kullandıkça öde |
+| **Porcupine** (Wake Word) | [console.picovoice.ai](https://console.picovoice.ai/) | Ücretsiz tier mevcut |
+| **Spotify** (Müzik) | [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard) | Ücretsiz |
+| **OpenWeatherMap** (Hava Durumu) | [openweathermap.org/api](https://openweathermap.org/api) | Ücretsiz tier mevcut |
 
 ---
 
-## 🏗️ Mimari Akış
+## 🎤 Kullanım
 
-```
-Kullanıcı: "Hey Aris"
-        |
-        v
- [Wake Word — Porcupine]
- "Hey Aris" duyuldu!
-        |
-        v
- [Ses Kaydı — PyAudio]
- Kullanıcı konuşuyor...
-        |
-        v
- [STT — OpenAI Whisper]
- Ses → Metin
-        |
-        v
- [AI Beyin — OpenAI ChatGPT]
- Metin → Aris'in kişiliğiyle yanıt
-        |
-        v
-  [TTS — pyttsx3]           [OLED Yüz — luma.oled]
-  Yanıt seslendirilir    +   Uygun yüz ifadesi gösterilir
-        |
-        v
-    Döngüye dön
-```
+Aris başlatıldıktan sonra iki şekilde konuşmayı başlatabilirsin:
+
+1. **Wake Word:** "Hey Aris" de — Porcupine algılayınca dinlemeye geçer
+2. **GUI Butonu:** Ekrandaki "Konuş" butonuna tıkla
+
+Aris dinliyor durumuna geçince sesli komutunu ver. Birkaç saniye içinde yanıt alırsın.
+
+**Örnek komutlar:**
+- *"Hava durumu nedir?"*
+- *"Weeknd'in şarkısını çal"*
+- *"Sonraki şarkıya geç"*
+- *"Bu gece ne yapmalıyım?"*
 
 ---
 
-## 📁 Dosya Yapısı
+## 📁 Proje Yapısı
 
 ```
 AR-S-AI/
-├── aris.py           # Her şey burada — tek dosya, temiz kafalar için
-├── requirements.txt  # Kütüphaneler
+├── aris.py           # Ana uygulama dosyası
+├── requirements.txt  # Python bağımlılıkları
+├── .env.example      # API key şablonu (gerçek key'ler buraya yazılmaz)
+├── .gitignore        # .env ve diğer hassas dosyaları dışlar
 ├── hey-aris.ppn      # Porcupine wake word modeli (kendin oluşturman lazım)
 └── README.md         # Bu dosya
 ```
 
----
+### `aris.py` İçindeki Bölümler
 
-## ⚠️ Notlar
-
-- **Porcupine keyword dosyası (`hey-aris.ppn`):** Picovoice Console'dan "Hey Aris" için custom keyword oluşturman gerekiyor. Ücretsiz.
-- **Whisper API:** OpenAI'ın ücretli API'si. Ucuz ama ücretsiz değil. Lokal Whisper da kullanabilirsin.
-- **OLED bağlı değilse:** Aris hata vermiyor, sadece yüz göstermiyor. Hayatına devam ediyor.
-- **Pi 4 performansı:** Whisper biraz yavaş olabilir. `whisper-1` modeli iyi bir denge sunar.
+| Bölüm | İçerik |
+|---|---|
+| **BÖLÜM 1: CONFIG** | API key'ler, cihaz ayarları, sabitler |
+| **BÖLÜM 2: OLED YÜZ** | luma.oled ile SSD1306 yüz ifadeleri |
+| **BÖLÜM 3: GUI** | Tkinter animasyonlu göz arayüzü |
+| **BÖLÜM 4: SPOTIFY** | Spotipy ile müzik kontrol fonksiyonları |
+| **BÖLÜM 5: HAVA DURUMU** | OpenWeatherMap API entegrasyonu |
+| **BÖLÜM 6: STT** | PyAudio kayıt + Whisper API transkripsiyon |
+| **BÖLÜM 7: TTS** | OpenAI TTS + pygame ses çalma |
+| **BÖLÜM 8: AI BEYİN** | GPT-4o-mini sohbet motoru |
+| **BÖLÜM 9: ANA DÖNGÜ** | Wake word + thread yönetimi |
 
 ---
 
 ## 📜 Lisans
 
-MIT — Yani istediğini yap. Sadece "Ben Aris'i yaptım" deme, o sana ait değil artık 😄
-
----
-
-## 🎉 Kapanış Notu
-
-Bu projeyi yaparken eğlendiysen, Aris işini yapmış demektir. Eğlenmediysen, debug yapıyorsundur ve bu da normal. Stack Overflow ve ChatGPT seninle olsun. Aris de tabii, ama o muhtemelen sana "Hata mı aldın? Ben de senden bezdim lan" diyecektir.
-
-**İyi kodlamalar! 🤙**
+MIT — İstediğini yap. Aris'i fork'la, geliştir, paylaş. 🤙
